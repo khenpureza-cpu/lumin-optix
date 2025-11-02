@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lumina Optix — Refraction & Lens Calculator</title>
+<style>
+body{font-family:'Poppins',sans-serif;margin:0;color:white;overflow-x:hidden;background:radial-gradient(ellipse at bottom,#0d1b2a 0%,#000 100%)}
+header{display:flex;justify-content:space-between;align-items:center;padding:15px 30px}
+h1{text-align:center;font-size:2rem;text-shadow:0 0 15px cyan;margin:0}
+.btn{padding:10px 20px;border:none;border-radius:10px;background:linear-gradient(90deg,#0077ff,#00d4ff);color:white;font-size:14px;cursor:pointer;transition:all 0.3s}
+.btn:hover{transform:scale(1.08);background:linear-gradient(90deg,#00d4ff,#0077ff);box-shadow:0 0 20px cyan}
+.container{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:20px;padding-bottom:60px}
+.panel{background:rgba(255,255,255,0.05);border-radius:15px;padding:20px;width:90%;max-width:500px;box-shadow:0 0 20px rgba(0,255,255,0.3);display:none}
+input{width:80%;padding:10px;border-radius:8px;border:none;margin-bottom:10px}
+.history{background:rgba(255,255,255,0.08);padding:10px;border-radius:10px;max-height:200px;overflow-y:auto;display:none}
+#howToUsePanel{background:rgba(255,255,255,0.1);padding:20px;border-radius:15px;width:90%;max-width:600px;margin:0 auto 20px;display:none;box-shadow:0 0 20px rgba(0,255,255,0.3);animation:fadeIn 0.5s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+canvas{position:fixed;top:0;left:0;z-index:-1}
+</style>
+</head>
+<body>
+<canvas id="galaxy"></canvas>
+<header>
+  <button class="btn" onclick="toggle('howToUsePanel')">❔ How to Use</button>
+  <h1>✨ Lumina Optix ✨<br>Refraction & Lens Calculator</h1>
+  <button class="btn" onclick="toggle('historyPanel')">📜 History</button>
+</header>
+
+<div id="howToUsePanel">
+  <h2>📘 How to Use Lumina Optix</h2>
+  <p><b>Problem Analyzer Mode:</b><br>
+  - Enter a short description of your problem (e.g., “Light travels from air to glass n1=1 n2=1.5 θ1=40°”).<br>
+  - Automatically detects <b>refraction</b> or <b>lens</b> problems.<br>
+  - Shows <b>Given, formula used, solution steps</b>, and final answer.<br>
+  - Saves results to history.</p>
+  <p><b>Calculator Mode:</b><br>
+  - Choose <b>Snell's Law</b> or <b>Lens Equation</b>.<br>
+  - Input known values, leave one blank → calculator solves it.<br>
+  - Snell's Law: n₁, n₂, θ₁ → θ₂ with formula & steps.<br>
+  - Lens Equation: f, do, or di → missing value with formula & steps.<br>
+  - Results are saved to history.</p>
+  <button class="btn" onclick="toggle('howToUsePanel')">Close</button>
+</div>
+
+<div class="container">
+  <button class="btn" onclick="chooseMode('analyzer')">Problem Analyzer Mode</button>
+  <button class="btn" onclick="chooseMode('calculator')">Calculator Mode</button>
+
+  <div id="analyzer" class="panel">
+    <h2>🔍 Problem Analyzer</h2>
+    <input type="text" id="problemText" placeholder="Enter your problem (e.g. Light travels from air...)"/>
+    <button class="btn" onclick="analyzeProblem()">Analyze & Solve</button>
+    <div id="analyzerResult"></div>
+  </div>
+
+  <div id="calculator" class="panel">
+    <h2>🧮 Calculator</h2>
+    <button class="btn" onclick="setCalcMode('snell')">Snell's Law</button>
+    <button class="btn" onclick="setCalcMode('lens')">Lens Equation</button>
+    <div id="calcInputs"></div>
+    <div id="calcResult"></div>
+  </div>
+
+  <div class="history" id="historyPanel">
+    <h3>📜 Computation History</h3>
+    <div id="historyList"></div>
+  </div>
+</div>
+
+<script>
+const canvas=document.getElementById("galaxy"),ctx=canvas.getContext("2d");canvas.width=innerWidth;canvas.height=innerHeight;
+let stars=Array.from({length:200},()=>({x:Math.random()*canvas.width,y:Math.random()*canvas.height,r:Math.random()*2,dx:(Math.random()-0.5)*0.5,dy:(Math.random()-0.5)*0.5}));
+function animateGalaxy(){ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle="white";stars.forEach(s=>{ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fill();s.x+=s.dx;s.y+=s.dy;if(s.x<0||s.x>canvas.width)s.dx*=-1;if(s.y<0||s.y>canvas.height)s.dy*=-1});requestAnimationFrame(animateGalaxy)}
+animateGalaxy();
+
+let currentMode=null,calcMode=null,historyList=document.getElementById("historyList");
+function toggle(id){const p=document.getElementById(id);p.style.display=p.style.display==="block"?"none":"block"}
+function chooseMode(m){document.getElementById("analyzer").style.display="none";document.getElementById("calculator").style.display="none";document.getElementById(m).style.display="block";currentMode=m}
+function saveHistory(type,details){let item=document.createElement("div");item.innerHTML=`<b>${type}:</b> ${details}`;historyList.prepend(item)}
+
+function analyzeProblem(){
+  const t=document.getElementById("problemText").value.toLowerCase();
+  let output="",deg=t.match(/(\d+(\.\d+)?)\s*(°|degrees?)/),theta1=deg?parseFloat(deg[1]):30;
+  if(t.includes("refract")||t.includes("angle")||t.includes("index")){
+    const n1=parseFloat(t.match(/n1\s*=\s*(\d+(\.\d+)?)/)?.[1]||1),
+          n2=parseFloat(t.match(/n2\s*=\s*(\d+(\.\d+)?)/)?.[1]||1.5),
+          sin2=(n1/n2)*Math.sin(theta1*Math.PI/180);
+    if(Math.abs(sin2)>1) output="Total internal reflection occurs.";
+    else{const theta2=Math.asin(sin2)*180/Math.PI;output=`<b>Detected:</b> Refraction Problem<br><b>Given:</b> n₁=${n1}, n₂=${n2}, θ₁=${theta1}°<br><b>Formula:</b> n₁sinθ₁ = n₂sinθ₂<br><b>Solution:</b> sinθ₂ = (${n1}/${n2})×sin(${theta1})<br><b>Answer:</b> θ₂ = ${theta2.toFixed(2)}°`}saveHistory("Snell's Law",output)
+  }else if(t.includes("lens")||t.includes("object")||t.includes("image")){
+    const f=parseFloat(t.match(/f\s*=\s*(\d+(\.\d+)?)/)?.[1]||10),
+          do_=parseFloat(t.match(/object.*?(\d+(\.\d+)?)/)?.[1]||20),
+          di=1/((1/f)-(1/do_));
+    output=`<b>Detected:</b> Lens Problem<br><b>Given:</b> f=${f} cm, do=${do_} cm<br><b>Formula:</b> 1/f = 1/do + 1/di<br><b>Solution:</b> di = 1 / ((1/${f}) - (1/${do_}))<br><b>Answer:</b> di = ${di.toFixed(2)} cm`;saveHistory("Lens Equation",output)
+  }else output="Could not detect the type of problem.";
+  document.getElementById("analyzerResult").innerHTML=output
+}
+
+function setCalcMode(m){
+  calcMode=m;
+  const ci=document.getElementById("calcInputs");
+  if(m==="snell")ci.innerHTML=`<h3>Snell's Law</h3>n₁: <input id="n1" type="number"><br>n₂: <input id="n2" type="number"><br>θ₁ (°): <input id="theta1" type="number"><br><button class="btn" onclick="calcSnell()">Compute</button>`;
+  else ci.innerHTML=`<h3>Lens Equation</h3>f: <input id="f" type="number"><br>do: <input id="do" type="number"><br>di: <input id="di" type="number"><br><button class="btn" onclick="calcLens()">Compute</button>`;
+}
+
+function calcSnell(){
+  const n1=parseFloat(document.getElementById("n1").value),
+        n2=parseFloat(document.getElementById("n2").value),
+        theta1=parseFloat(document.getElementById("theta1").value),
+        sin2=(n1/n2)*Math.sin(theta1*Math.PI/180);
+  let res;
+  if(Math.abs(sin2)>1) res="Total internal reflection occurs.";
+  else{const theta2=Math.asin(sin2)*180/Math.PI;res=`<b>Formula:</b> n₁sinθ₁ = n₂sinθ₂<br><b>Solution:</b> sinθ₂ = (${n1}/${n2})×sin(${theta1})<br><b>Answer:</b> θ₂ = ${theta2.toFixed(2)}°`}
+  document.getElementById("calcResult").innerHTML=res;saveHistory("Snell's Law",res)
+}
+
+function calcLens(){
+  const f=parseFloat(document.getElementById("f").value),
+        do_=parseFloat(document.getElementById("do").value),
+        di=parseFloat(document.getElementById("di").value);
+  let missing=null,res="";
+  if(isNaN(f)){missing="f";res=1/((1/do_)+(1/di))}
+  else if(isNaN(do_)){missing="do";res=1/((1/f)-(1/di))}
+  else if(isNaN(di)){missing="di";res=1/((1/f)-(1/do_))}
+  else res="Please leave one field blank.";
+  document.getElementById("calcResult").innerHTML=`<b>Formula:</b> 1/f = 1/do + 1/di<br><b>Answer:</b> ${missing} = ${res.toFixed?res.toFixed(2):res}`;
+  saveHistory("Lens Equation",res)
+}
+</script>
+</body>
+</html>
